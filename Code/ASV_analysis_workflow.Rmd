@@ -1,0 +1,86 @@
+---
+title: "RomanEstrada_ASV_analysis"
+author: "David Haak"
+date: "`r Sys.Date()`"
+output: html_document
+keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      echo = FALSE,
+                      cache = TRUE,
+                      echo = TRUE)
+knitr::opts_knit$set(root.dir = normalizePath("/Volumes/GoogleDrive/My Drive/2022 Wheat MS ASVs/Wheat_seed_endophytes/Data/"))
+```
+
+```{r}
+library(dada2)
+library(phyloseq)
+library(DESeq2)
+library(ggplot2)
+library(ape)
+library(plyr)
+library(dplyr)
+library(microeco)
+library(gridExtra)
+library(file2meco)
+library(ggh4x)
+library(ggdendro)
+library(ggpubr)
+library(ggalluvial)
+library(NatParksPalettes)
+library(biomformat)
+library(tidyverse)
+```
+
+## Convert biom file to csv
+```{r}
+asv_table <- read_biom("LB5353_wheat_FINAL_TABLE/feature-table.biom")
+asv_table <- as.data.frame(as.matrix(biom_data(asv_table)))
+view(asv_table)
+write.csv(asv_table, "LB5353_wheat_FINAL_TABLE/feature-table.csv")
+```
+
+```{r}
+asv_table <- read.csv("LB5353_wheat_FINAL_TABLE/feature-table.csv")
+rownames(asv_table) <-asv_table$X
+asv_table <- asv_table %>% dplyr::select(-X)
+sample_file <- read.table("JW18A_Wheat_metadata.txt", header = TRUE) %>% 
+  dplyr::select(SampleID, WheatSite, WheatVariety,	WheatSampleSet)
+tax_file <- read_csv("LB5353_wheat_FINAL_TAXONOMY/taxonomy.csv")
+rownames(tax_file) <-tax_file$ASVID
+
+
+kernel_asv <- microtable$new(otu_table = asv_table, tax_table = tax_file)
+kernel_asv$sample_table$Site <- sample_file$WheatSite
+kernel_asv$sample_table$Variety <- sample_file$WheatVariety
+kernel_asv$sample_table$Rep <- sample_file$WheatSampleSet
+rownames(kernel_asv$tax_table) <- tax_file$ASVID
+#kernel_asv$tidy_dataset()
+kernel_asv$tax_table <- kernel_asv$tax_table %>% 
+  dplyr::filter(!row_number() %in% 53)
+kernel_asv$sample_sums() %>% range
+kernel_asv$otu_table <- kernel_asv$otu_table %>% 
+  dplyr::filter(!row_number() %in% 53)
+tax_file <- tax_file %>% 
+  dplyr::filter(!row_number() %in% 53)
+rownames(kernel_asv$tax_table) <- tax_file$ASVID
+#kernel_asv$tidy_dataset()
+
+
+```
+
+```{r RAplotBySite}
+kernel_abund<-trans_abund$new(dataset = kernel_asv, taxrank = "Family", ntaxa = 20)
+kernel_abund$plot_bar(others_color = "grey70", facet = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, color_palette_20)
+
+kernel_abund$plot_bar(others_color = "grey70", facet = "Variety", facet2 = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1, color_palette_20)
+```
+
+```{r Most_abundant}
+kernel_abund2 <- trans_abund$new(dataset = kernel_asv, taxrank = "Family", ntaxa = 7)
+kernel_abund2$plot_box(group = "Site") 
+```
+
