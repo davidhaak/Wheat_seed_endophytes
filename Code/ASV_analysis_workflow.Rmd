@@ -24,6 +24,7 @@ library(ape)
 library(plyr)
 library(dplyr)
 library(microeco)
+library(mecodev)
 library(gridExtra)
 library(file2meco)
 library(ggh4x)
@@ -45,46 +46,133 @@ write.csv(asv_table, "LB5353_wheat_FINAL_TABLE/feature-table.csv")
 
 ```{r}
 asv_table <- read.csv("LB5353_wheat_FINAL_TABLE/feature-table.csv")
-rownames(asv_table) <-asv_table$X
-asv_table <- asv_table %>% dplyr::select(-X)
-sample_file <- read.table("JW18A_Wheat_metadata.txt", header = TRUE) %>% 
-  dplyr::select(SampleID, WheatSite, WheatVariety,	WheatSampleSet)
-tax_file <- read_csv("LB5353_wheat_FINAL_TAXONOMY/taxonomy.csv")
-rownames(tax_file) <-tax_file$ASVID
+tax_file <- read.csv ("LB5353_wheat_FINAL_TAXONOMY/taxonomy.csv")
+full_table <- inner_join(asv_table,tax_file, by = "Feature_ID")
+full_table$asvid <- paste0("ASV", 1:nrow(full_table))
+asv_table <- full_table %>% 
+  select(2:28, 35)
+tax_tab <- full_table %>% 
+  select(29:35)
+row.names(asv_table) <- asv_table$asvid
+asv_table <- asv_table %>% select(-(asvid))
+row.names(tax_tab) <- tax_tab$asvid
+tax_tab <- tax_tab %>% select(-asvid)
 
-
-kernel_asv <- microtable$new(otu_table = asv_table, tax_table = tax_file)
+kernel_asv <- microtable$new(otu_table = asv_table, tax_table = tax_tab)
 kernel_asv$sample_table$Site <- sample_file$WheatSite
 kernel_asv$sample_table$Variety <- sample_file$WheatVariety
 kernel_asv$sample_table$Rep <- sample_file$WheatSampleSet
-rownames(kernel_asv$tax_table) <- tax_file$ASVID
-#kernel_asv$tidy_dataset()
-kernel_asv$tax_table <- kernel_asv$tax_table %>% 
-  dplyr::filter(!row_number() %in% 53)
-kernel_asv$sample_sums() %>% range
-kernel_asv$otu_table <- kernel_asv$otu_table %>% 
-  dplyr::filter(!row_number() %in% 53)
-tax_file <- tax_file %>% 
-  dplyr::filter(!row_number() %in% 53)
-rownames(kernel_asv$tax_table) <- tax_file$ASVID
-#kernel_asv$tidy_dataset()
+kernel_asv$tidy_dataset()
+#kernel_asv$tax_table <- kernel_asv$tax_table %>% 
+#  dplyr::filter(!row_number() %in% 53)
+#kernel_asv$sample_sums() %>% range
+#kernel_asv$otu_table <- kernel_asv$otu_table %>% 
+#  dplyr::filter(!row_number() %in% 53)
+#tax_file <- tax_file %>% 
+#  dplyr::filter(!row_number() %in% 53)
 
+kernel_asv$tidy_dataset()
+kernel_asv
 
 ```
 
 ```{r RAplotBySite}
 kernel_abund<-trans_abund$new(dataset = kernel_asv, taxrank = "Family", ntaxa = 20)
-kernel_abund$plot_bar(others_color = "grey70", facet = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, color_palette_20)
+p1 <- kernel_abund$plot_bar(others_color = "grey70", facet = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, color_palette_20)
 
-kernel_abund$plot_bar(others_color = "grey70", facet = "Variety", facet2 = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1, color_palette_20)
+p2 <- kernel_abund$plot_bar(others_color = "grey70", facet = "Variety", facet2 = "Site", xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1, color_palette_20)
 ```
 
 ```{r Most_abundant}
 kernel_abund2 <- trans_abund$new(dataset = kernel_asv, taxrank = "Family", ntaxa = 7)
-kernel_abund2$plot_box(group = "Site") 
+p3 <- kernel_abund2$plot_box(group = "Site") 
 ```
+
+## Lineplot of taxa RA by site
+```{r lineplotRA}
+taxaline <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 5)
+p4 <- taxaline$plot_line(color_palette_20)
+taxalinesite <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 6, group = "Site")
+p5 <- taxalinesite$plot_line(position = position_dodge(0.3), xtext_type_hor = TRUE, color_palette_20) + theme_bw()
+```
+
+# Calculate abundances on resampled rarified data
+```{r generate_data_files}
+kernel_asv$save_abund(dirpath = "/Volumes/GoogleDrive/My Drive/2022 Wheat MS ASVs/Wheat_seed_endophytes/Data/")
+kernel_asv$cal_alphadiv(PD = FALSE)
+kernel_asv$save_alphadiv(dirpath = "/Volumes/GoogleDrive/My Drive/2022 Wheat MS ASVs/Wheat_seed_endophytes/Data/")
+kernel_asv$cal_betadiv(unifrac = FALSE)
+# return dataset$beta_diversity
+class(kernel_asv$beta_diversity)
+# save dataset$beta_diversity to a directory
+kernel_asv$save_betadiv(dirpath = "/Volumes/GoogleDrive/My Drive/2022 Wheat MS ASVs/Wheat_seed_endophytes/Data/")
+```
+
+## Merge data for venn plots
+```{r vennplots}
+venn_merge_site <- kernel_asv$merge_samples(use_group = "Site")
+venn_plot_site <- trans_venn$new(venn_merge_site, ratio = "seqratio")
+p6 <- venn_plot_site$plot_venn()
+
+venn_merge_var <- kernel_asv$merge_samples(use_group = "Variety")
+venn_plot_var <- trans_venn$new(venn_merge_var, ratio = "seqratio")
+p7 <- venn_plot_var$plot_venn()
+```
+
+# Calculating alpha diversity
+
+## Alpha diversity by site
+```{r alphabysite}
+alphasite <- trans_alpha$new(dataset = kernel_asv, group = c("Variety","Site"))
+alphasite$cal_diff(method = "anova", anova_set = "Site * Variety")
+
+alphasite$res_diff
+my_pal<-c("steelblue4", "lightblue", "orange")
+p8 <- alphasite$data_alpha %>% 
+  filter(Measure == "Observed") %>% 
+  ggplot(aes(Variety, Value, color = Site)) +
+  geom_boxplot() + 
+  ylab("Observed taxa") +
+  #scale_color_brewer(palette = "Dark2") +
+  scale_color_manual(values=my_pal) +
+  theme_bw()
+
+```
+
+
+# Calculating Beta diversity
+
+# Bray-curtis on all samples
+```{r brayall}
+bray_all <- trans_beta$new(dataset = kernel_asv, group = "Site", measure = "bray")
+#set seed can help us reach convergence
+set.seed(1)
+bray_all$cal_ordination(ordination = "PCoA")
+# t1$res_ordination is the ordination result list
+class(bray_all$res_ordination)
+# plot the PCoA result with confidence ellipse
+p9 <- bray_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
+```
+
+## Jaccard for all
+```{r brayall}
+jacc_all <- trans_beta$new(dataset = kernel_asv, group = "Site", measure = "jaccard")
+#set seed can help us reach convergence
+set.seed(1)
+jacc_all$cal_ordination(ordination = "PCoA")
+# t1$res_ordination is the ordination result list
+class(jacc_all$res_ordination)
+# plot the PCoA result with confidence ellipse
+p10 <- jacc_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
+```
+
+## Cluster and PerMANOVA
+```{r bray_cluster}
+p10 <- bray_all$plot_clustering(group = "Site", replace_name = c("Variety"), color_palette_20)
+```
+
 
 ```{r}
-
+bray_bb$cal_manova(manova_set = "distance + site")
+bray_bb$res_manova
 ```
-
