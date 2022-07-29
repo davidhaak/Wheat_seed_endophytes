@@ -84,3 +84,7 @@ kernel_abund2 <- trans_abund$new(dataset = kernel_asv, taxrank = "Family", ntaxa
 kernel_abund2$plot_box(group = "Site") 
 ```
 
+```{r}
+
+```
+
