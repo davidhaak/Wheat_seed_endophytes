@@ -30,6 +30,7 @@ library(file2meco)
 library(ggh4x)
 library(ggdendro)
 library(ggpubr)
+library(RColorBrewer)
 library(ggalluvial)
 library(NatParksPalettes)
 library(biomformat)
@@ -56,21 +57,22 @@ tax_tab <- full_table %>%
 row.names(asv_table) <- asv_table$asvid
 asv_table <- asv_table %>% select(-(asvid))
 row.names(tax_tab) <- tax_tab$asvid
-tax_tab <- tax_tab %>% select(-asvid)
+tax_tab <- tax_tab %>% 
+  select(-asvid) %>% 
+  separate(Kingdom, c("a", "Kingdom"), "\\__*") %>% 
+  separate(Phylum, c("a", "Phylum"), "\\__*") %>% 
+  separate(Class, c("a", "Class"), "\\__*") %>% 
+  separate(Order, c("a", "Order"), "\\__*") %>% 
+  separate(Family, c("a", "Family"), "\\__*") %>% 
+  separate(Genus, c("a", "Genus"), "\\__*") %>% 
+  select(-a)
+
+  
 
 kernel_asv <- microtable$new(otu_table = asv_table, tax_table = tax_tab)
 kernel_asv$sample_table$Site <- sample_file$WheatSite
 kernel_asv$sample_table$Variety <- sample_file$WheatVariety
 kernel_asv$sample_table$Rep <- sample_file$WheatSampleSet
-kernel_asv$tidy_dataset()
-#kernel_asv$tax_table <- kernel_asv$tax_table %>% 
-#  dplyr::filter(!row_number() %in% 53)
-#kernel_asv$sample_sums() %>% range
-#kernel_asv$otu_table <- kernel_asv$otu_table %>% 
-#  dplyr::filter(!row_number() %in% 53)
-#tax_file <- tax_file %>% 
-#  dplyr::filter(!row_number() %in% 53)
-
 kernel_asv$tidy_dataset()
 kernel_asv
 
@@ -110,13 +112,26 @@ kernel_asv$save_betadiv(dirpath = "/Volumes/GoogleDrive/My Drive/2022 Wheat MS A
 
 ## Merge data for venn plots
 ```{r vennplots}
-venn_merge_site <- kernel_asv$merge_samples(use_group = "Site")
+venn_merge_site <- kernel_asv$merge_samples(use_group = ("Site"))
 venn_plot_site <- trans_venn$new(venn_merge_site, ratio = "seqratio")
 p6 <- venn_plot_site$plot_venn()
 
 venn_merge_var <- kernel_asv$merge_samples(use_group = "Variety")
 venn_plot_var <- trans_venn$new(venn_merge_var, ratio = "seqratio")
 p7 <- venn_plot_var$plot_venn()
+```
+
+## Who is different
+```{r}
+genusdiff <- venn_plot_site$trans_comm(use_frequency = TRUE)
+# calculate taxa abundance, that is, the frequency
+genusdiff$cal_abund()
+genusdiff$taxa_abund
+# transform and plot
+genusdiff2 <- trans_abund$new(dataset = genusdiff, taxrank = "Genus", ntaxa = 8)
+p16 <- genusdiff2$plot_bar(bar_type = "part", legend_text_italic = T, ylab_title = "Frequency (%)", xtext_type_hor = FALSE, color_palette_20,
+    order_x = c("BB", "BS", "HO", "BB&BS", "BB&HO", "BS&HO", "BB&BS&HO")) +
+  theme_bw()
 ```
 
 # Calculating alpha diversity
@@ -166,13 +181,145 @@ class(jacc_all$res_ordination)
 p10 <- jacc_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
 ```
 
+
+```{r}
+bray_all$cal_ordination(ordination = "NMDS")
+p11 <- bray_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
+jacc_all$cal_ordination(ordination = "NMDS")
+p12 <- jacc_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
+
+```
+
 ## Cluster and PerMANOVA
 ```{r bray_cluster}
-p10 <- bray_all$plot_clustering(group = "Site", replace_name = c("Variety"), color_palette_20)
+p13 <- bray_all$plot_clustering(group = "Site", replace_name = c("Variety"), color_palette_20)
+p14 <- jacc_all$plot_clustering(group = "Site", replace_name = c("Variety"), color_palette_20)
 ```
 
 
 ```{r}
-bray_bb$cal_manova(manova_set = "distance + site")
-bray_bb$res_manova
+bray_all$cal_manova(manova_set = "Site * Variety")
+bray_all$res_manova
+jacc_all$cal_manova(manova_set = "Site * Variety")
+jacc_all$res_manova
 ```
+
+## Beta dispersion with Bray-Curtis
+```{r BetadisperBray}
+bray_all$cal_betadisper()
+bray_all$res_betadisper
+```
+
+## Beta dispersion with Jaccard
+```{r betadisprJacc}
+jacc_all$cal_betadisper()
+jacc_all$res_betadisper
+```
+
+## Calucualte distances
+```{r}
+bray_all$cal_group_distance()
+bray_all$res_group_distance
+p15 <- bray_all$res_group_distance %>% 
+  ggplot(aes(Site, value)) +
+  geom_boxplot() +
+  ylab("Bray-Curtis distance") +
+  theme_bw()
+```
+
+## Calculate taxa abundance
+```{r}
+raw_taxa<- as.data.frame(t(kernel_asv$otu_table))
+raw_taxa <- raw_taxa/rowSums(raw_taxa)
+wheatRA <- cbind(kernel_asv$sample_table,raw_taxa)
+taxa_wheat <- tax_tab %>%
+  rownames_to_column(var="ASV")
+wheatRA <- wheatRA %>% 
+  select(-SampleID) %>% 
+  rownames_to_column(var = "SampleID") %>% 
+  select(-Group, -Rep) %>% 
+  pivot_longer(4:90,
+               names_to = "ASV",
+               values_to = "Abundance") %>% 
+  left_join(taxa_wheat) %>% 
+  view()
+```
+
+## Make a taxa plot function
+```{r taxapllotFUN}
+taxa_plot <- function(x,y,z){
+  ggplot(x, aes(x = Variety, y = Abundance, shape=Site)) + 
+    ggtitle(z) +
+  geom_jitter(size = 3, color = y) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(),
+        panel.border=element_rect(colour = "black", fill=NA))+
+  ylab("Raw Abundance")+
+  theme(plot.title=element_text(hjust = 0.5, size = 22),
+        axis.text=element_text(size = 16),
+        axis.title=element_text(size = 20),
+        axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)) +
+  geom_vline(xintercept = 1.5, linetype="dashed", 
+             color = "grey", size=1) +
+  geom_vline(xintercept = 2.5, linetype="dashed", 
+             color = "grey", size=1)
+  
+}
+```
+
+#Plotting specific taxa 
+```{r}
+PAN<-wheatRA %>% 
+  filter(Genus == "Pantoea")
+p17 <- taxa_plot(PAN,"red", "Pantoea")
+
+PSE<-wheatRA %>% 
+  filter(Genus == "Pseudomonas")
+p18 <- taxa_plot(PSE,"purple", "Pseudomonas")
+
+LAC<-wheatRA %>% 
+  filter(Genus == "Lactobacillus")
+p19 <- taxa_plot(LAC, "darkorange4", "Lactobacillus")
+
+MET<-wheatRA %>% 
+  filter(Genus == "Methylobacterium")
+p20 <- taxa_plot(MET, "deepskyblue4", "Methylobacterium") 
+
+p21 <- arrangeGrob(p17,p18,p19,p20, nrow = 2, ncol = 2)
+ggsave("taxa_panel.png", p21)
+```
+
+## Generate a plot with RA by site faceted by Variety
+```{r}
+colourCount<- length(unique(WheatRA2_long2$Family))
+getPalette<- colorRampPalette(brewer.pal(12, "Paired"))
+ra_site_genus<-ggplot(wheatRA, aes(x = Site, y = Abundance, fill = Genus)) + 
+  geom_bar(stat = "identity", position="fill") +
+  scale_fill_manual(values = getPalette(colourCount)) +
+  facet_wrap(vars(Variety)) +
+  theme_classic() +
+  theme(axis.title.x=element_blank(),
+        panel.border=element_rect(colour = "black", fill=NA)) +
+  ylab("Relative Abundance") +
+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=26),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust =1))
+ra_site_genus
+```
+
+## Generate a plot with Family RA by site faceted by Variety
+```{r}
+ra_site_fam<-ggplot(wheatRA, aes(x = Site, y = Abundance, fill = Family)) + 
+  geom_bar(stat = "identity", position="fill") +
+  scale_fill_manual(values = getPalette(colourCount)) +
+  facet_wrap(vars(Variety)) +
+  theme_classic() +
+  theme(axis.title.x=element_blank(),
+        panel.border=element_rect(colour = "black", fill=NA)) +
+  ylab("Relative Abundance") +
+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=26),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust =1))
+ra_site_fam
+```
+
