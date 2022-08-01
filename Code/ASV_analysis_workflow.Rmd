@@ -147,10 +147,22 @@ p8 <- alphasite$data_alpha %>%
   filter(Measure == "Observed") %>% 
   ggplot(aes(Variety, Value, color = Site)) +
   geom_boxplot() + 
-  ylab("Observed taxa") +
-  #scale_color_brewer(palette = "Dark2") +
+  ylab("Observed richness") +
   scale_color_manual(values=my_pal) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.title.y = element_text(size = 20)) +
+  theme(axis.title.x = element_text(size = 20))
+
+p8.1 <- alphasite$data_alpha %>% 
+  filter(Measure == "Shannon") %>% 
+  ggplot(aes(Variety, Value, color = Site)) +
+  geom_boxplot() + 
+  ylab("Shannon index") +
+  scale_color_manual(values=my_pal) +
+  theme_bw() +
+  theme(axis.title.y = element_text(size = 20)) +
+  theme(axis.title.x = element_text(size = 20))
+p8.1
 
 ```
 
