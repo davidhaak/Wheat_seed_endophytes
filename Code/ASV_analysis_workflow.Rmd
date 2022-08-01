@@ -122,7 +122,7 @@ p7 <- venn_plot_var$plot_venn()
 ```
 
 ## Who is different
-```{r}
+```{r genus_diff}
 genusdiff <- venn_plot_site$trans_comm(use_frequency = TRUE)
 # calculate taxa abundance, that is, the frequency
 genusdiff$cal_abund()
