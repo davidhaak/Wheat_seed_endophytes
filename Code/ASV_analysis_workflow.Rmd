@@ -34,6 +34,7 @@ library(RColorBrewer)
 library(ggalluvial)
 library(NatParksPalettes)
 library(biomformat)
+library(lme4)
 library(tidyverse)
 ```
 
@@ -94,8 +95,12 @@ p3 <- kernel_abund2$plot_box(group = "Site")
 ```{r lineplotRA}
 taxaline <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 5)
 p4 <- taxaline$plot_line(color_palette_20)
-taxalinesite <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 6, group = "Site")
+taxalinesite <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 8, group = "Site")
 p5 <- taxalinesite$plot_line(position = position_dodge(0.3), xtext_type_hor = TRUE, color_palette_20) + theme_bw()
+
+taxalinesite <- trans_abund$new(dataset = kernel_asv, taxrank = "Genus", ntaxa = 6, group = "Variety")
+p5.1 <- taxalinesite$plot_line(position = position_dodge(0.3), xtext_type_hor = TRUE, color_palette_20) + theme_bw()
+
 ```
 
 # Calculate abundances on resampled rarified data
@@ -166,7 +171,6 @@ p8.1
 
 ```
 
-
 # Calculating Beta diversity
 
 # Bray-curtis on all samples
@@ -196,7 +200,7 @@ p10 <- jacc_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plo
 
 ```{r}
 bray_all$cal_ordination(ordination = "NMDS")
-p11 <- bray_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
+p11 <- bray_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw() + xlab("NMDS1") + ylab("NMDS2")
 jacc_all$cal_ordination(ordination = "NMDS")
 p12 <- jacc_all$plot_ordination(plot_color = "Site", plot_shape = "Variety", plot_type = c("point", "ellipse"), color_palette_20, point_size =5) + theme_bw()
 
@@ -234,9 +238,16 @@ bray_all$cal_group_distance()
 bray_all$res_group_distance
 p15 <- bray_all$res_group_distance %>% 
   ggplot(aes(Site, value)) +
+  theme_bw() +
   geom_boxplot() +
+    scale_x_discrete(labels = c("Samples", "BB", "BS", "HO"), limits = c("Samples", "BB", "BS", "HO")) +
+  geom_boxplot(aes(value), position = position_nudge( x = 0.475)) +
   ylab("Bray-Curtis distance") +
-  theme_bw()
+  xlab("") +
+  
+  theme(axis.title.y = element_text(size = 20)) +
+  theme(axis.text.x = element_text(size = 18))
+  
 ```
 
 ## Calculate taxa abundance
@@ -301,6 +312,22 @@ p21 <- arrangeGrob(p17,p18,p19,p20, nrow = 2, ncol = 2)
 ggsave("taxa_panel.png", p21)
 ```
 
+
+```{r}
+pathos <- wheatRA %>% 
+  filter(Genus == "Curtobacterium") %>%
+  filter(Abundance > 0) %>% 
+  ggplot(aes(Site, Abundance, color = ASV)) +
+  geom_boxplot()
+
+curt_asvs <- wheatRA %>% 
+  filter(Genus == c("Curtobacterium")) %>%
+  group_by(ASV) %>% 
+  summarise(mean = mean(Abundance)*100, n = n()) %>% 
+  view()
+  
+```
+
 ## Generate a plot with RA by site faceted by Variety
 ```{r}
 colourCount<- length(unique(WheatRA2_long2$Family))
@@ -335,3 +362,18 @@ ra_site_fam<-ggplot(wheatRA, aes(x = Site, y = Abundance, fill = Family)) +
 ra_site_fam
 ```
 
+## Generate a plot with Family RA by site faceted by Variety
+```{r}
+ra_site_phy<-ggplot(wheatRA, aes(x = Site, y = Abundance, fill = Phylum)) + 
+  geom_bar(stat = "identity", position="fill") +
+  scale_fill_manual(values = getPalette(colourCount)) +
+  facet_wrap(vars(Variety)) +
+  theme_classic() +
+  theme(axis.title.x=element_blank(),
+        panel.border=element_rect(colour = "black", fill=NA)) +
+  ylab("Relative Abundance") +
+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=26),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust =1))
+ra_site_phy
+```
